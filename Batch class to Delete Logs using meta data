@@ -1,0 +1,87 @@
+public class MART_Log_Cleaner_Batch implements Database.Batchable<sObject> {
+  
+    String query ='';
+    String messageBody= '';
+	MART_Log_Cleaner_Batch_Settings__mdt mc;
+    
+	public MART_Log_Cleaner_Batch(){
+        
+        mc = MART_Log_Cleaner_Batch_Settings__mdt.getInstance('MART_Application_Log_Cleaner');
+		if(mc==null){
+			query = mc.Batch_SOQL_Query__c;
+		
+		String query = isEmpty(mc.Batch_WHERE_Clause__c)? query : query+mc.Batch_WHERE_Clause__c
+		
+		}
+       
+    }
+    
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+		// make empty query and see what happn if batch gives error add if condition
+		if(query== null){
+			System.abortJob(bc.getJobId());
+		}
+        return Database.getQueryLocator(query);
+    }
+    
+    public void execute(Database.BatchableContext bc, List<sObject> scope){
+        
+		try{	
+        // Check if log cleaner is checked
+        if(mc.Is_Log_Cleaner_On__c){
+
+            //isdeleteable method to check access of the running user
+            if (Schema.sObjectType.MART_Application_Logs__c.isDeletable()) {
+   			// Delete log
+   			 Database.delete(scope);
+            // Report errors here
+                        Database.DeleteResult[] drList = Database.delete(scope, false);
+                        
+                        // Iterate through each returned result
+                        for(Database.DeleteResult dr : drList) {
+                            if (dr.isSuccess()) {
+                                // Operation was successful, so get the ID of the record that was processed
+                                System.debug('Successfully deleted account with ID: ' + dr.getId());
+                                messageBody= messageBody+dr.getId();
+                            }
+                            else {
+                                // Operation failed, so get all errors                
+                                for(Database.Error err : dr.getErrors()) {
+                                    System.debug('The following error has occurred.');                    
+                                    System.debug(err.getStatusCode() + ': ' + err.getMessage());
+                                    System.debug('Logs fields that affected this error: ' + err.getFields());
+                                    messageBody= messageBody+dr.getId();
+                                }
+                            }
+                       }
+				  }
+        	 }
+            
+            else{
+                System.abortJob(bc.getJobId());
+                messageBody= messageBody+'flag is off';
+            }
+			}
+			
+			catch(execption e){
+				
+			}
+    	} 
+    public void finish(Database.BatchableContext bc){
+		
+		AsyncApexJob objAsyncJob = [SELECT Id, Status, JobItemsProcessed, TotalJobItems, NumberOfErrors, ExtendedStatus, CompletedDate, CreatedDate FROM AsyncApexJob WHERE Id = :bc.getJobId()];
+     
+        String strSubject = 'ChangeAccountIndustryBatch with id ' + objAsyncJob.Id + ' is completed with ' + objAsyncJob.Status;
+        
+         // Email Body
+        String strBatchBody = 'The batch apex job processed ' + objAsyncJob.TotalJobItems + ' batches with ' + objAsyncJob.NumberOfErrors + ' failures.<br/>'
+                   + 'Start time: <b>' + objAsyncJob.CreatedDate.format('MM/dd/yyyy HH:mm') + '</b><br/>'
+                   + 'End time: <b>' + objAsyncJob.CompletedDate.format('MM/dd/yyyy HH:mm') + '</b><br/>'
+                   + 'Time taken in minutes: <b>' + ((Decimal)(objAsyncJob.CompletedDate.getTime() - objAsyncJob.CreatedDate.getTime())/1000/60).setScale(2) + '</b><br/>';
+		
+        //time taken by batch add in messageBody
+        emailSending semail = new emailSending();
+        
+        semail.sendMail(messageBody);
+    }
+}

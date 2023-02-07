@@ -1,0 +1,89 @@
+/*********************************************************************************************************
+Class Name      : MART_Log_Cleaner_Batch_Test 
+Description     : This class will test the MART_Log_Cleaner_Batch
+Created By      : Jugal Sheoran
+Created Date    : Oct 03, 2022
+Modification Log:
+--------------------------------------------------------------------------------------------------------------
+Developer                   Date                   Description
+--------------------------------------------------------------------------------------------------------------
+Jugal Sheoran               Oct 03, 2022            Initial Version
+**********************************************************************************************************/
+@isTest
+public class Test_MART_MART_Log_Cleaner_Batch {
+    
+    //Creating Test Data
+    @testSetup
+    static void setup(){
+        
+        //single record test data
+			MART_Application_Logs__c me = new MART_Application_Logs__c();
+            me.RITM_Number__c = 'RITM000001';
+            me.RITM_Owner__c = 'Integrationadmin';
+            insert me;
+        	Datetime last90Days = Datetime.now().addDays(-92);
+        	Test.setCreatedDate(me.Id,last90Days );
+        // negative date test data
+        	MART_Application_Logs__c mn = new MART_Application_Logs__c();
+            mn.RITM_Number__c = 'RITM001';
+            mn.RITM_Owner__c = 'Integrationadmin';
+            insert mn;
+        
+        // bulk data creation
+        	List<MART_Application_Logs__c> mc = new List<MART_Application_Logs__c>();
+        	for(Integer i=2;i<201;i++) {
+            mc.add(new MART_Application_Logs__c(RITM_Number__c='RITM00000'+i, RITM_Owner__c='Integrationadmin'));
+        	}
+        	insert mc;
+        	List<MART_Application_Logs__c> ids = [Select id from MART_Application_Logs__c Where id IN:mc];
+        	for(MART_Application_Logs__c mctime:ids) {
+        		Test.setCreatedDate(mctime.id,last90Days);
+        	}
+        	
+    }
+    
+/*--------------------------------------------------------------------------------------------------------------
+Developer                   Date                   Description
+--------------------------------------------------------------------------------------------------------------
+Jugal Sheoran               Oct 03, 2022            Test for Single Record deletion
+**************************************************************************************************************/
+    
+    // single record insert Positive test
+    @isTest static void testpositive() {
+        Test.startTest();
+        MART_Log_Cleaner_Batch ma = new MART_Log_Cleaner_Batch();
+        Id batchId = Database.executeBatch(ma);
+        // after the testing stops, assert records were updated properly
+        System.assertEquals(0, [select count() from MART_Application_Logs__c where RITM_Number__c = 'RITM000001' AND CreatedDate < LAST_90_DAYS]);
+        Test.stopTest();
+    	}
+
+/*--------------------------------------------------------------------------------------------------------------
+Developer                   Date                   Description
+--------------------------------------------------------------------------------------------------------------
+Jugal Sheoran               Oct 03, 2022            Test for Bulk Record deletion
+**************************************************************************************************************/
+  	@isTest static void testbulkRecord() {
+        Test.startTest();
+        System.debug('bulktest'+[select count() from MART_Application_Logs__c where CreatedDate < LAST_90_DAYS]);
+        MART_Log_Cleaner_Batch ma = new MART_Log_Cleaner_Batch();
+        Id batchId = Database.executeBatch(ma);
+        // after the testing stops, assert records were updated properly
+        System.assertEquals(0, [select count() from MART_Application_Logs__c where RITM_Owner__c='Integrationadmin'AND CreatedDate < LAST_90_DAYS]);
+        Test.stopTest();
+    	}
+    
+/*--------------------------------------------------------------------------------------------------------------
+Developer                   Date                   Description
+--------------------------------------------------------------------------------------------------------------
+Jugal Sheoran               Oct 03, 2022            Test for when there is no Record deletion
+**************************************************************************************************************/
+    @isTest static void testnegative() {
+        Test.startTest();
+        MART_Log_Cleaner_Batch ma = new MART_Log_Cleaner_Batch();
+        Id batchId = Database.executeBatch(ma);
+        // after the testing stops, assert records were updated properly
+        System.assertNotEquals(0, [select count() from MART_Application_Logs__c where RITM_Number__c='RITM001']);
+        Test.stopTest();
+    	}
+}

@@ -1,0 +1,71 @@
+/*********************************************************************************************************
+Class Name      : MART_Log_Cleaner_Batch 
+Description     : This class will delete the logs
+Created By      : Jugal Sheoran
+Created Date    : Oct 03, 2022
+Modification Log:
+--------------------------------------------------------------------------------------------------------------
+Developer                   Date                   Description
+--------------------------------------------------------------------------------------------------------------
+Jugal Sheoran               Oct 03, 2022            Initial Version
+**********************************************************************************************************/
+public class MART_Log_Cleaner_Batch implements Database.Batchable<sObject>,Database.Stateful {
+  	String messageBody	=	'';
+    Integer recordCount	=	0;
+    static List<Id> deletedIds, failedIds ;
+    
+	public Database.QueryLocator start(Database.BatchableContext bc) {
+            //no of logs proccessed in the query
+        	return Database.getQueryLocator('Select id from MART_Application_Logs__c where CreatedDate < LAST_N_DAYS:90');
+    }
+    
+    public void execute(Database.BatchableContext bc, List<sObject> scope){
+        
+		try{
+            System.debug('scope size'+ scope.size());
+            if (Schema.sObjectType.MART_Application_Logs__c.isDeletable()) {
+   			// Delete log
+   			Database.DeleteResult[] drList = Database.delete(scope, false);
+            // Iterate through each returned result
+            deletedIds	=	new List<Id>();
+            failedIds	=	new List<Id>();    
+                for(Database.DeleteResult dr : drList) {
+                    if (dr.isSuccess()) {
+                        recordCount	=	recordCount + 1; 
+                        // Operation was successful, so get the ID of the record that was processed
+                        deletedIds.add(dr.getId());
+                    }
+                    else {
+                            System.debug('Error message' + dr.getErrors()[0].getMessage());
+                            System.debug('Logs fields that affected this error: ' + dr.getErrors()[0].getFields());
+                            failedIds.add(dr.getId());
+                    	}
+                }  
+            }
+           else{
+               //Abort job if no records are there
+               System.abortJob(bc.getJobId());
+           }
+        }
+		catch (Exception e) {
+   			 // Handle this exception here
+		}
+    } 
+    public void finish(Database.BatchableContext bc){
+        
+		AsyncApexJob objAsyncJob = [SELECT Id, Status, JobItemsProcessed, TotalJobItems, NumberOfErrors, ExtendedStatus, CompletedDate, CreatedDate FROM AsyncApexJob WHERE Id = :bc.getJobId()];
+     
+        String strSubject = 'ChangeAccountIndustryBatch with id ' + objAsyncJob.Id + ' is completed with ' + objAsyncJob.Status;
+        
+         // Email Body
+        String strBatchBody = 'The batch apex job processed ' + objAsyncJob.TotalJobItems + ' batches with ' + objAsyncJob.NumberOfErrors + ' failures.<br/>'
+                   + 'Start time: <b>' + objAsyncJob.CreatedDate.format('MM/dd/yyyy HH:mm') + '</b><br/>'
+                   + 'End time: <b>' + objAsyncJob.CompletedDate.format('MM/dd/yyyy HH:mm') + '</b><br/>'
+                   + 'Time taken in minutes: <b>' + ((Decimal)(objAsyncJob.CompletedDate.getTime() - objAsyncJob.CreatedDate.getTime())/1000/60).setScale(2) + '</b><br/>';
+		
+        //time taken by batch add in messageBody
+        emailSending semail = new emailSending();
+        
+        semail.sendMail(messageBody);
+    }
+}

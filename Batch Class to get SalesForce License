@@ -1,0 +1,51 @@
+/*********************************************************************************************************
+    Class Name      : LiscenseBatch 
+    Description     : This class will Give Total and assigned liscense
+    Created By      : Jugal Sheoran
+    Created Date    : Feb 09, 2023
+    Modification Log:
+    --------------------------------------------------------------------------------------------------------------
+    Developer                   Date                   Description
+    --------------------------------------------------------------------------------------------------------------
+    Jugal Sheoran               Feb 09, 2023            Initial Version
+    **********************************************************************************************************/
+    public class LicenseBatch implements Database.Batchable<sObject>,Database.Stateful{
+         
+       List<String> messageBody;
+        public Database.QueryLocator start(Database.BatchableContext bc) {
+           
+           String query='SELECT Name, UsedLicenses, TotalLicenses FROM UserLicense where Name IN (\'Salesforce Platform\',\'Salesforce\')';
+           return Database.getQueryLocator(query);
+        }
+        
+        public void execute(Database.BatchableContext bc, List<UserLicense> scope){
+            
+            List<String> licenseList = new List<String>();
+            for(UserLicense sc : scope){
+                licenseList.add('LicenseName:'+sc.Name+'  UsedLicenses: '+sc.UsedLicenses+'  TotalLicenses:'+sc.TotalLicenses+' ');
+                 messageBody = licenseList;
+            }
+        } 
+        public void finish(Database.BatchableContext bc){
+       
+           Messaging.SingleEmailMessage message = new Messaging.SingleEmailMessage();
+            
+            List<String> ls = new List<String>{'jsheoran@dminc.com'};
+    
+            message.ToAddresses = ls;
+    
+            message.Subject = 'License Information ';
+    
+            message.PlainTextBody ='License Information :'+ messageBody;
+    
+            List<Messaging.SingleEmailMessage> messages = new List<Messaging.SingleEmailMessage>{message};
+    
+            List<Messaging.SendEmailResult> results = Messaging.sendEmail(messages);
+            if (results[0].success) {
+                System.debug('The email was sent successfully.');
+            } 
+            else {
+                System.debug('The email failed to send: '+ results[0].errors[0].message);
+            }
+    	}
+    }
